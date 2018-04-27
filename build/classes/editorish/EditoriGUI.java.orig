@@ -1,0 +1,211 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+package editorish;
+
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.GridBagLayout;
+import java.awt.Toolkit;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
+import java.util.Vector;
+import javax.swing.DefaultListModel;
+import javax.swing.JButton;
+import javax.swing.JFileChooser;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
+import javax.swing.SwingWorker.StateValue;
+import static javax.swing.SwingWorker.StateValue.DONE;
+import static javax.swing.SwingWorker.StateValue.PENDING;
+import static javax.swing.SwingWorker.StateValue.STARTED;
+import javax.swing.event.ListSelectionEvent;
+import javax.swing.event.ListSelectionListener;
+
+/**
+ *
+ * @author rbecker
+ */
+public class EditoriGUI extends JFrame implements ActionListener, ListSelectionListener {
+    private static final long serialVersionUID = 1L;
+
+    /**
+     * ****************************
+     */
+    private DefaultListModel listModel;
+    private Vector<FileSummary> tempList;
+    private static Editorish editorishObject;
+    private FileOpener fileWorker;
+
+    public EditoriGUI() throws InterruptedException {
+
+
+
+
+        newEditorishObject();
+
+        editorishObject.execute();
+
+
+    }
+
+    private static void gui() throws InterruptedException {
+        //luodaan ja naytetaan ikkuna
+
+        EditoriGUI gui = new EditoriGUI();
+
+        gui.setTitle("Editorish");
+        gui.pack();
+        gui.setVisible(true);
+        gui.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
+    }
+
+    public void directorySelector() {
+
+        JPanel dirPanel = new JPanel(new GridBagLayout());
+
+        directoryChooser = new JFileChooser();
+        directoryChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        directoryChooser.addActionListener(this);
+        directoryChooser.setAcceptAllFileFilterUsed(false);
+        dirPanel.add(directoryChooser);
+
+        dirSelectionWindow = new JFrame();
+        dirSelectionWindow.setSize(600, 400);
+        dirSelectionWindow.setVisible(true);
+        dirSelectionWindow.setLayout(new FlowLayout());
+        dirSelectionWindow.add(dirPanel);
+
+    }
+
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        statusLabel2Value.setText(e.getActionCommand());
+        switch (e.getActionCommand()) {
+            case "HakuToiminto":
+                searchList();
+
+                break;
+            case "AvaaHakemisto":
+                this.directorySelector();
+
+                break;
+            case "ApproveSelection":
+                // tyhjätään textarea...
+                fileViewer.removeAll();
+                dirSelectionWindow.dispose();
+                newEditorishObject();
+                editorishObject.setDirectory(directoryChooser.getSelectedFile().toString());
+                editorishObject.execute();
+
+
+
+                break;
+            case "CancelSelection":
+                dirSelectionWindow.dispose();
+
+                break;
+
+        }
+
+        this.repaint();
+    }
+
+    @Override
+    public void valueChanged(ListSelectionEvent e) {
+
+
+        JList list = (JList) e.getSource();
+        int index = list.getSelectedIndex();
+
+
+
+
+        if (index == -1) {
+        } else {
+
+            this.repaint();
+
+
+
+            fileViewer.setText(null);
+            try {
+                fileWorker.cancel(true);
+                
+            } catch (NullPointerException ex) {
+            
+            } finally {
+                fileWorker = new FileOpener(fileViewer, tempList, index);
+                fileWorker.execute();
+            }
+
+
+            this.repaint();
+        }
+
+
+
+
+    }
+
+    private void searchList() {
+        String listaus = "";
+        listModel = new DefaultListModel();
+        String hakusana = searchField.getText();
+        tempList = editorishObject.findWord(hakusana);
+        for (int i = 0; i < tempList.size(); i++) {
+            listModel.addElement("Osumia: "
+                    + tempList.get(i).getWord(hakusana)
+                    + " kpl\t\t tiedostossa: "
+                    + tempList.get(i).getFilename()
+                    + "\n");
+
+        }
+        searchResults.removeAll();
+        searchResults.setModel(listModel);
+    }
+
+    public static void main(String[] args) throws InterruptedException {
+        EditoriGUI.gui();
+    }
+
+    private void newEditorishObject() {
+        editorishObject = new Editorish(filesScannedLabelQty, fileCount, wordsScannedLabelQty);
+        editorishObject.addPropertyChangeListener(new PropertyChangeListener() {
+            @Override
+            public void propertyChange(PropertyChangeEvent event) {
+
+                switch (event.getPropertyName()) {
+                    case "progress":
+                        break;
+                    case "state":
+                        switch ((StateValue) event.getNewValue()) {
+                            case DONE:
+                                statusLabel1Value.setText("Completed");
+
+                                editorishObject.cancel(true);
+                                break;
+                            case STARTED:
+                                statusLabel1Value.setText("Running");
+                                break;
+                            case PENDING:
+                                statusLabel1Value.setText("Pending");
+                                break;
+                        }
+                        break;
+                }
+            }
+        });
+    }
+}

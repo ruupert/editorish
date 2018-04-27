@@ -1,0 +1,271 @@
+package editorish;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.Collections;
+import java.util.List;
+import java.util.Vector;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import javax.swing.JLabel;
+import javax.swing.SwingWorker;
+import com.ibm.icu.text.CharsetDetector;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+
+/**
+ *
+ * @author Ruupert
+ */
+public class Editorish extends SwingWorker<Integer, String> {
+
+    private static String directory;
+    private static FileReader fileReader;
+    private static BufferedReader reader;
+    private static Vector<FileSummary> dataStruct;
+    private static int filesRead, fileCount, wordCount;
+    private static String[] words;
+    private JLabel filesScannedLabelQty, fileCountLabel, wordsScannedLabelQty;
+
+    public Editorish(final JLabel filesScannedLabelQty, final JLabel fileCountLabel, final JLabel wordsScannedLabelQty) {
+        this.fileCountLabel = fileCountLabel;
+        this.filesScannedLabelQty = filesScannedLabelQty;
+        this.wordsScannedLabelQty = wordsScannedLabelQty;
+
+        dataStruct = new Vector<>();
+        directory = String.valueOf(System.getProperty("user.dir"));
+
+        filesRead = 0;
+        fileCount = 0;
+        wordCount = 0;
+    }
+
+    private static File openFile(String filename) {
+        // tässä sitten pitää try catchaa...         
+        File f = new File(filename);
+        return f;
+    }
+
+    private static void readFile(File inputFile) {
+        try {
+            CharsetDetector detector = new CharsetDetector();
+
+
+            fileReader = new FileReader(inputFile);
+
+            FileInputStream fis = new FileInputStream(inputFile);
+            detector.setText(fis);
+            
+            System.out.println(detector.detect().toString());
+
+
+            System.out.println(fileReader.getEncoding());
+            reader = new BufferedReader(fileReader);
+            int rowCount = 0, wordCount = 0, currentBatchRow = 0;
+            String rivi;
+
+            FileSummary tempSummary = new FileSummary();
+            tempSummary.setFilename(inputFile.toString());
+            tempSummary.setWordCount(wordCount);
+            tempSummary.setLineCount(rowCount);
+
+            dataStruct.add(tempSummary);
+
+            while ((rivi = reader.readLine()) != null) {
+
+
+
+                if (currentBatchRow == 2000) {
+                    Thread.sleep(50);
+                    currentBatchRow = 0;
+                } else {
+
+                    rowCount++;
+                    words = rivi.toLowerCase().split(" ");
+                    wordCount += words.length;
+
+                    setWordCount(getWordCount() + words.length);
+
+                    for (String word : words) {
+                        dataStruct.lastElement().setLineCount(wordCount);
+                        dataStruct.lastElement().setWordCount(wordCount);
+                        dataStruct.lastElement().addWord(word);
+                    }
+                    currentBatchRow++;
+                }
+            }
+            setFilesRead(getFilesRead() + 1);
+
+        } catch (FileNotFoundException ex) {
+            Logger.getLogger(Editorish.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (IOException | InterruptedException ex) {
+            Logger.getLogger(Editorish.class.getName()).log(Level.SEVERE, null, ex);
+        }
+
+    }
+
+    public int getFilesScanned() {
+        return getFilesRead();
+    }
+
+    public int getFileCount() {
+        return fileCount;
+    }
+
+    public void resetFilesScanned() {
+        setFilesRead(0);
+        setFileCount(0);
+        setWordCount(0);
+    }
+
+    public Vector<FileSummary> findWord(String word) {
+        FileSummary tempSummary;
+        Vector<FileSummary> tempList = new Vector<>();
+
+        for (int i = 0; i < dataStruct.size(); i++) {
+            tempSummary = dataStruct.get(i);
+
+            //  System.out.println(tempSummary.getWord(word));
+            if (tempSummary.getWord(word) == 0) {
+            } else {
+                tempSummary.setWordCount(tempSummary.getWord(word));
+                tempList.add(tempSummary);
+            }
+        }
+
+        Collections.sort(tempList);
+
+        for (int i = 0; i < tempList.size(); i++) {
+        }
+        return tempList;
+    }
+
+    public Vector<FileSummary> getList() {
+        return dataStruct;
+    }
+
+    public static void recurseList(String targetDirectoryName) {
+        try {
+
+            File targetDirectory = openFile(targetDirectoryName);
+            for (File f : targetDirectory.listFiles()) {
+
+                if (f.isDirectory()) {
+                    recurseList(f.getAbsolutePath());
+
+                } else {
+
+                    readFile(f);
+                }
+            }
+
+        } catch (NullPointerException e) {
+            // ei tehdä mitään.
+        }
+    }
+
+    public void countFiles(String targetDirectoryName) {
+        try {
+
+            File targetDirectory = openFile(targetDirectoryName);
+            for (File f : targetDirectory.listFiles()) {
+
+                if (f.isDirectory()) {
+                    countFiles(f.getAbsolutePath());
+                } else {
+                    setFileCount(getFileCount() + 1);
+
+                }
+            }
+
+        } catch (NullPointerException e) {
+            // ei tehdä mitään.
+        }
+
+    }
+
+    public static void main(String[] args) {
+    }
+
+    @Override
+    protected Integer doInBackground() throws Exception {
+        countFiles(directory);
+        fileCountLabel.setText(" / " + String.valueOf(this.getFileCount()));
+        Thread t = new Thread(new Runnable() {
+            public void run() {
+                while (getFileCount() > getFilesScanned()) {
+                    try {
+                        Thread.sleep(500);
+                        filesScannedLabelQty.setText(String.valueOf(getFilesScanned()));
+                        wordsScannedLabelQty.setText(String.valueOf(getWordCount()));
+                    } catch (InterruptedException ex) {
+                        Logger.getLogger(Editorish.class.getName()).log(Level.SEVERE, null, ex);
+                    }
+                }
+            }
+        });
+        t.start();
+
+        recurseList(directory);
+
+
+
+        t.join();
+
+        return 1;
+
+    }
+
+    /**
+     * @return the directory
+     */
+    public String getDirectory() {
+        return directory;
+    }
+
+    /**
+     * @param directory the directory to set
+     */
+    public void setDirectory(String directory) {
+        this.directory = directory;
+    }
+
+    /**
+     * @return the filesRead
+     */
+    public static int getFilesRead() {
+        return filesRead;
+    }
+
+    /**
+     * @param aFilesRead the filesRead to set
+     */
+    public static void setFilesRead(int aFilesRead) {
+        filesRead = aFilesRead;
+    }
+
+    /**
+     * @param aFileCount the fileCount to set
+     */
+    public static void setFileCount(int aFileCount) {
+        fileCount = aFileCount;
+    }
+
+    /**
+     * @return the wordCount
+     */
+    public static int getWordCount() {
+        return wordCount;
+    }
+
+    /**
+     * @param aWordCount the wordCount to set
+     */
+    public static void setWordCount(int aWordCount) {
+        wordCount = aWordCount;
+    }
+}
